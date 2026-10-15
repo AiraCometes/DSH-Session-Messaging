@@ -1,0 +1,41 @@
+{
+  "name": "dsh-session-messaging",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Observable, durable coordination for DeepSeek Harness sessions",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AiraCometes/DSH-Session-Messaging.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "exports": {
+    ".": "./src/plugin.js",
+    "./core": "./src/core/index.js",
+    "./http": "./src/http/server.js",
+    "./adapters/harness": "./src/adapters/harness.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node examples/demo.js",
+    "check": "node scripts/check.js"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.1-alpha.3",
+    "@deepseek-ai/dsh-tools": "0.2.1-alpha.3"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.3",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.3"
+  }
+}
