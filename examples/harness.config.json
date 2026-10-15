@@ -1,0 +1,18 @@
+{
+  "database": ".tower/control-tower.sqlite",
+  "viewerTokenEnv": "DSH_TOWER_VIEWER_TOKEN",
+  "port": 3091,
+  "pollMs": 500,
+  "limits": {
+    "maxMessageBytes": 65536,
+    "maxPending": 1000,
+    "maxThreadMessages": 32,
+    "maxSendsPerMinute": 60
+  },
+  "sessions": [
+    { "id": "control", "role": "tower", "address": "REPLACE-CONTROL-SESSION-ID", "provider": "REPLACE-PROVIDER", "model": "REPLACE-MODEL" },
+    { "id": "spec", "role": "spec", "address": "REPLACE-SPEC-SESSION-ID", "provider": "REPLACE-PROVIDER", "model": "REPLACE-MODEL" },
+    { "id": "implementation", "role": "implementation", "address": "REPLACE-IMPLEMENTATION-SESSION-ID", "provider": "REPLACE-PROVIDER", "model": "REPLACE-MODEL" },
+    { "id": "review", "role": "review", "address": "REPLACE-REVIEW-SESSION-ID", "provider": "REPLACE-PROVIDER", "model": "REPLACE-MODEL" }
+  ]
+}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DSH Session Messaging — 通信ログ</title>
+<style>
+  :root { color-scheme: light dark; font: 15px/1.6 system-ui,sans-serif; }
+  body { max-width: 1120px; margin: auto; padding: 24px; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; } h2 { font-size: 1.2rem; }
+  input,select,button { font: inherit; padding: 8px; } button { cursor:pointer; }
+  input { min-width: 16rem; } label { display:inline-block; margin: 4px 12px 4px 0; }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:10px; border-bottom:1px solid #8886; vertical-align:top; }
+  .scroll { overflow:auto; } .muted { opacity:.75; } #connection { min-height:1.6em; }
+  article { padding:16px 0; border-bottom:1px solid #8886; } summary { cursor:pointer; }
+  pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; padding:12px; background:#8881; }
+  code { overflow-wrap:anywhere; } .badge { border:1px solid #8888; border-radius:4px; padding:2px 6px; margin-left:8px; }
+  .failed,.uncertain { border-color:#d05835; } section { margin-top:28px; } [hidden] { display:none!important; }
+  :focus-visible { outline:3px solid #648dff; outline-offset:3px; }
+</style>
+<header><h1>DSH Session Messaging</h1><div class="muted">セッション間の通信とタスク進捗を確認</div></header>
+<form id="login"><label>閲覧トークン <input id="token" type="password" autocomplete="off" required></label><button>接続</button></form>
+<p id="connection" role="status" aria-live="polite">未接続</p>
+<main id="content" hidden>
+  <button id="disconnect">切断して表示を消去</button>
+  <section><h2>セッション</h2><p class="muted">モデル名は接続設定のラベルです。稼働状態とタスク完了は別に表示します。</p><div class="scroll"><table><thead><tr><th>ID</th><th>役割</th><th>プロバイダー / モデル</th><th>最後に観測した稼働状態</th></tr></thead><tbody id="sessions"></tbody></table></div></section>
+  <section><h2>タスク</h2><div class="scroll"><table><thead><tr><th>タスク</th><th>担当</th><th>状態</th><th>版 / 対象コミット</th></tr></thead><tbody id="tasks"></tbody></table></div></section>
+  <section><h2>通信タイムライン</h2>
+    <label>セッション <select id="sessionFilter"><option value="">すべて</option></select></label>
+    <label>タスク <input id="taskFilter" placeholder="タスクIDで絞り込み"></label>
+    <label>状態 <select id="statusFilter"><option value="">すべて</option><option>queued</option><option>delivering</option><option>accepted</option><option>processing</option><option>completed</option><option>failed</option><option>uncertain</option></select></label>
+    <p class="muted">最新200件。accepted は受信受付、processing / completed は受信者による報告です。通信の完了とタスクの完了は別です。</p>
+    <div id="messages"></div>
+  </section>
+  <section><h2>イベント履歴</h2><p class="muted">保存済みの状態遷移とGitHub通知を、古い順に確認できます。</p><button id="history">履歴を読む（次の100件）</button><div id="events"></div></section>
+</main>
+<script src="/viewer.js" defer></script>
+</html>
