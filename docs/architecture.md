@@ -24,6 +24,13 @@ coreはNode.js標準ライブラリだけに依存する。HarnessやGitHub固�
 | `http/server.js` | 読み取り専用API、認証、Webhookエンドポイント |
 | `http/viewer.*` | 通信内容・状態・タスクを人間へ表示 |
 | `plugin.js` | 設定と実Agentの対応、スコープ別ツール、初期化と終了 |
+| `config.js` | Cordis/DSH設定画面で使うStandard Schemaと既定値 |
+
+## 配布とプロファイルへの登録
+
+`package.json` の `dsh.bundle.patch` が `cordis.patch.yml` を指す。このパッチは `id: session-messaging` のホスト行を挿入し、初期状態を `enabled: false` にする。利用者はプロファイルのパッチでconfig全体を指定して有効化する。標準の `dsh plugin add/remove` がbundleの選択を管理し、ホストコードの編集は不要。`engines.dsh` で検証対象の0.2.1-rc.2を明示する。
+
+実行ファイルはJavaScriptのため、配布時のビルド・prepareは不要。tarballには実行JSとviewerアセットを一緒に含める。coreは引き続きNode標準ライブラリだけに依存し、設定スキーマ用のSchemasteryはプラグイン境界の実行依存とする。導入の結合テストはモデルを呼ばず、実DSHプロファイルと実Agentを使って実行する。
 
 ## 配送先を追加する
 
