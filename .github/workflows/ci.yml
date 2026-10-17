@@ -14,3 +14,24 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm test
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install isolated DSH runtime
+        run: npm install --prefix "$RUNNER_TEMP/dsh-runtime" --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh@0.2.1-rc.2 pnpm@11.28.5
+      - name: Verify tarball installation, activation and removal
+        run: |
+          export PATH="$RUNNER_TEMP/dsh-runtime/node_modules/.bin:$PATH"
+          export DSH_BIN="$RUNNER_TEMP/dsh-runtime/node_modules/.bin/dsh"
+          npm run test:install
+      - name: Verify linked checkout installation, activation and removal
+        run: |
+          export PATH="$RUNNER_TEMP/dsh-runtime/node_modules/.bin:$PATH"
+          export DSH_BIN="$RUNNER_TEMP/dsh-runtime/node_modules/.bin/dsh"
+          DSH_INSTALL_MODE=link npm run test:install

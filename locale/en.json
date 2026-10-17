@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Messaging",
+    "description": "Audited messaging and task coordination between explicitly configured Harness sessions. Configure session bindings before enabling."
+  }
+}

@@ -4,16 +4,24 @@ import { ensure, integer } from './core/validation.js';
 import { createHarnessAdapter } from './adapters/harness.js';
 import { GitHubIntegration } from './integrations/github.js';
 import { startServer } from './http/server.js';
+import { Config } from './config.js';
+
+export { Config } from './config.js';
 
 export const name = 'session-messaging';
 export const inject = ['agents', 'tools'];
 
 /** Cordis entry point. The runtime imports remain confined to this boundary. */
 export async function apply(ctx, config = {}) {
+  const resolved = Config(config);
+  if (!resolved.enabled) {
+    ctx.logger?.info('Session Messaging is installed and awaiting configuration (enabled: false).');
+    return;
+  }
   const [{ defineTool }, { createUserMessage }] = await Promise.all([
     import('@deepseek-ai/dsh-tools'), import('@deepseek-ai/dsh-llm'),
   ]);
-  await applyWithDependencies(ctx, config, { defineTool, createUserMessage });
+  await applyWithDependencies(ctx, resolved, { defineTool, createUserMessage });
 }
 
 /** Dependency injection also permits a contract test without downloading Harness. */
@@ -23,6 +31,8 @@ export async function applyWithDependencies(ctx, config, { defineTool, createUse
     'INVALID_CONFIG', 'Configure at least one Harness session binding');
   ensure(new Set(bindings.map(s => s.address)).size === bindings.length,
     'INVALID_CONFIG', 'Each Harness address can have only one trusted session identity');
+  ensure(new Set(bindings.map(s => s.id)).size === bindings.length,
+    'INVALID_CONFIG', 'Each configured session identity must be unique');
   const pollMs = integer(config.pollMs ?? 500, 'pollMs', 100, 60000);
   const viewerToken = process.env[config.viewerTokenEnv ?? 'DSH_TOWER_VIEWER_TOKEN'];
   const store = new Store(resolve(config.database ?? '.tower/control-tower.sqlite'));

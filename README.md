@@ -2,7 +2,7 @@
 
 DeepSeek Harnessのセッション間通信を記録し、コントロールタワー・仕様・実装・レビューの進捗を確認するためのプラグインです。異なるモデルを使うセッションを、同じ通信形式で扱います。
 
-**現在は初期実装 v0.1。** 同一Harnessプロセス内の、明示的に設定したロード済みセッションを接続します。別プロセス・別マシン間の配送、セッションの自動生成・コールド再開、モデル選択の自動化は今後の拡張です。
+**現在は初期実装 v0.1.1。** DSHの標準bundleとしてインストールできます。同一Harnessプロセス内の、明示的に設定したロード済みセッションを接続します。別プロセス・別マシン間の配送、セッションの自動生成・コールド再開、モデル選択の自動化は今後の拡張です。
 
 ## できること
 
@@ -28,15 +28,47 @@ npm run demo
 
 表示されたローカルURLを開き、ターミナルに表示される閲覧トークンを入力してください。4役の**模擬通信**を閲覧できます。実モデルは動きません。データは `.tower/demo.sqlite` に保存されます。トークンを固定する場合は `DSH_TOWER_VIEWER_TOKEN` を24バイト以上に設定します。
 
-## Harnessへ接続
+## DSHへインストール
 
-1. 利用するHarness環境で、コントロールタワー・仕様・実装・レビューの各セッションを作成し、それぞれのモデルを選択します。
-2. `examples/harness.config.json` の `address` を実際のHarness Session IDに置き換えます。`model` / `provider` は監査用の設定ラベルです。実際のモデルを変更した場合は設定も更新し、新しいセッションIDを割り当ててください。
-3. Harnessが使うNode.js環境からこのパッケージと `@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-llm` を解決できるようにします。
-4. このプラグインの `src/plugin.js` を既存Cordis構成からロードし、JSON設定を渡します。ホストコードからの登録例は `examples/mount.js` にあります。
-5. `DSH_TOWER_VIEWER_TOKEN` を設定して起動し、`http://127.0.0.1:3091` で通信を確認します。
+対象はWSL2/Linux、Node.js 24以降、DSH **0.2.1-rc.2**です。`package.json` の `dsh.bundle` と同梱の `cordis.patch.yml` により、標準の `dsh plugin add` で登録します。ホストコードの編集は不要です。
 
-対象にした公開パッケージは `0.2.1-alpha.3` です。テストは実際の `defineTool` / `createUserMessage` の契約を検証しています。認証済みLLMを呼ぶHarness全体でのE2E検証はまだ行っていません。
+このリポジトリを取得して依存を準備した後、**既にWeb UIで使っているプロファイル**へ追加してください（以下は `web` の例）。DSHとpnpmは導入済みであることを前提とします。
+
+```bash
+git clone https://github.com/AiraCometes/DSH-Session-Messaging.git
+cd DSH-Session-Messaging
+npm ci --ignore-scripts
+dsh plugin --profile web add "$PWD"
+dsh --profile web --dump-config
+```
+
+`id: session-messaging`、`name: dsh-session-messaging`、`enabled: false` の設定が追加されます。インストール直後は設定待ちで、DBや閲覧サーバーを開きません。専用プロファイルを作る場合、初回だけ `dsh --profile session-messaging --from-default-profile web --dump-config` でWeb構成を作ってから追加します。この初期化コマンドは既存の同名プロファイルを置き換えるため、更新時には再実行しないでください。
+
+**`shiguredo/deepseek-harness`をソースから動かす場合も同じbundleです。** フォーク側のビルド済みチェックアウトで、上記の `dsh ...` を `pnpm dsh ...` として実行します。追加するパスには、このプラグインの絶対パスを指定します。詳しい手順は [標準インストールガイド](docs/installation.md) を参照してください。
+
+### 接続先を設定して有効化
+
+1. Harness側で利用するセッションを作成・ロードし、それぞれのモデルを選択します。
+2. [examples/profile.patch.yml](examples/profile.patch.yml) を編集し、`address` を実Session ID、`database` を専用DBの絶対パスへ変更します。`model` / `provider` は監査用の設定ラベルであり、モデル選択は行いません。
+3. 編集した行を `$DSH_HOME/profiles/<使用プロファイル>/cordis.patch.yml` に追加します。既定のDSH_HOMEは `~/.dsh` です。既存のパッチを上書きせず、同じidの行があればその行を更新してください。設定の `enabled: true` も必要です。
+4. 起動するシェルに `DSH_TOWER_VIEWER_TOKEN` を24バイト以上で設定し、`dsh --profile web --no-open` で起動します。
+5. 既定の `http://127.0.0.1:3091` を開き、トークンを入力して通信を確認します。
+
+プロファイルのパッチは対象行のconfig全体を置き換えます。変更する項目だけでなく、必要なsessions等も含めて設定してください。接続先を設定しても、既存セッションの生成・ロードやモデル呼び出しは自動では行いません。
+
+v0.1.0から手動のホスト組み込みを継続する場合も、`enabled: true` を設定に追加してください。`examples/mount.js` はその開発者向けの例であり、通常のインストールには不要です。
+
+公開DSH 0.2.1-rc.2では、tarballの導入・プロファイル起動・実Agentへのツール登録・閲覧認証・削除をモデル呼び出しなしで検証します。指定フォークの導入仕様と関連APIも照合していますが、フォークをソースからビルドした実行環境や、認証済みLLMを含む4役のE2E検証は別途必要です。
+
+### 削除
+
+DSHを停止し、ユーザーパッチの `id: session-messaging` 行を取り除いてから、次を実行します。
+
+```bash
+dsh plugin --profile web remove dsh-session-messaging
+```
+
+設定レイヤーと依存パッケージを削除します。通信履歴DBは自動削除しません。
 
 systemPromptサービスが利用できるAgentには、監査可能な通信ツールを使うための共通指示を登録します。ログの対象は本プラグイン経由の通信です。組み込みの `send_message` や外部チャットなど別経路の通信を自動収集する機能は含みません。
 
@@ -88,6 +120,7 @@ src/plugin.js      Cordisへの登録とライフサイクル
 ```
 
 - [設計・拡張ガイド](docs/architecture.md)
+- [標準インストール・更新・削除](docs/installation.md)
 - [運用とデータ契約](docs/operations.md)
 - [段階的な追加機能](docs/roadmap.md)
 - [設計判断](docs/adr-0001-modular-coordination.md)

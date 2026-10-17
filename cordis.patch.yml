@@ -1,0 +1,6 @@
+# Installing this bundle registers the host plugin, initially awaiting configuration.
+- insert:
+    - id: session-messaging
+      name: dsh-session-messaging
+      config:
+        enabled: false
