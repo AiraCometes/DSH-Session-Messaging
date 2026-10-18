@@ -30,7 +30,7 @@ npm run demo
 
 ## DSHへインストール
 
-対象はWSL2/Linux、Node.js 24以降、DSH **0.2.1-rc.2**です。`package.json` の `dsh.bundle` と同梱の `cordis.patch.yml` により、標準の `dsh plugin add` で登録します。ホストコードの編集は不要です。
+対象はWSL2/Linux、Node.js 24以降、**公式npm版DSH 0.2.1-rc.2**です。`package.json` の `dsh.bundle` と同梱の `cordis.patch.yml` により、標準の `dsh plugin add` で登録します。ホストコードの編集は不要です。
 
 このリポジトリを取得して依存を準備した後、**既にWeb UIで使っているプロファイル**へ追加してください（以下は `web` の例）。DSHとpnpmは導入済みであることを前提とします。
 
@@ -44,21 +44,21 @@ dsh --profile web --dump-config
 
 `id: session-messaging`、`name: dsh-session-messaging`、`enabled: false` の設定が追加されます。インストール直後は設定待ちで、DBや閲覧サーバーを開きません。専用プロファイルを作る場合、初回だけ `dsh --profile session-messaging --from-default-profile web --dump-config` でWeb構成を作ってから追加します。この初期化コマンドは既存の同名プロファイルを置き換えるため、更新時には再実行しないでください。
 
-**`shiguredo/deepseek-harness`をソースから動かす場合も同じbundleです。** フォーク側のビルド済みチェックアウトで、上記の `dsh ...` を `pnpm dsh ...` として実行します。追加するパスには、このプラグインの絶対パスを指定します。詳しい手順は [標準インストールガイド](docs/installation.md) を参照してください。
+公式DSHのホストコードの改修や、shiguredoフォークは必要ありません。WSLのzsh、専用npm prefix、systemdの環境変数設定と再起動は [WSL＋systemd運用ガイド](docs/wsl-systemd.md) を参照してください。通常の導入・更新・削除は [標準インストールガイド](docs/installation.md) にまとめています。
 
 ### 接続先を設定して有効化
 
 1. Harness側で利用するセッションを作成・ロードし、それぞれのモデルを選択します。
 2. [examples/profile.patch.yml](examples/profile.patch.yml) を編集し、`address` を実Session ID、`database` を専用DBの絶対パスへ変更します。`model` / `provider` は監査用の設定ラベルであり、モデル選択は行いません。
 3. 編集した行を `$DSH_HOME/profiles/<使用プロファイル>/cordis.patch.yml` に追加します。既定のDSH_HOMEは `~/.dsh` です。既存のパッチを上書きせず、同じidの行があればその行を更新してください。設定の `enabled: true` も必要です。
-4. 起動するシェルに `DSH_TOWER_VIEWER_TOKEN` を24バイト以上で設定し、`dsh --profile web --no-open` で起動します。
+4. 起動するシェル（systemdの場合はサービスのEnvironmentFile）に `DSH_TOWER_VIEWER_TOKEN` を24バイト以上で設定し、`dsh --profile web --no-open` で起動します。
 5. 既定の `http://127.0.0.1:3091` を開き、トークンを入力して通信を確認します。
 
 プロファイルのパッチは対象行のconfig全体を置き換えます。変更する項目だけでなく、必要なsessions等も含めて設定してください。接続先を設定しても、既存セッションの生成・ロードやモデル呼び出しは自動では行いません。
 
 v0.1.0から手動のホスト組み込みを継続する場合も、`enabled: true` を設定に追加してください。`examples/mount.js` はその開発者向けの例であり、通常のインストールには不要です。
 
-公開DSH 0.2.1-rc.2では、tarballの導入・プロファイル起動・実Agentへのツール登録・閲覧認証・削除をモデル呼び出しなしで検証します。指定フォークの導入仕様と関連APIも照合していますが、フォークをソースからビルドした実行環境や、認証済みLLMを含む4役のE2E検証は別途必要です。
+公開DSH 0.2.1-rc.2では、tarballの導入・プロファイル起動・実Agentへのツール登録・閲覧認証・削除をモデル呼び出しなしで検証します。認証済みLLMを含む4役のE2E検証、fang2houの日本語パックやDSH-Marketとの同時稼働は別途必要です。
 
 ### 削除
 
@@ -121,6 +121,7 @@ src/plugin.js      Cordisへの登録とライフサイクル
 
 - [設計・拡張ガイド](docs/architecture.md)
 - [標準インストール・更新・削除](docs/installation.md)
+- [WSL＋systemd・専用npm prefix](docs/wsl-systemd.md)
 - [運用とデータ契約](docs/operations.md)
 - [段階的な追加機能](docs/roadmap.md)
 - [設計判断](docs/adr-0001-modular-coordination.md)

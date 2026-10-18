@@ -3,9 +3,9 @@
 ## 対応環境
 
 - WSL2/Linux、Node.js 24以降。
-- `@deepseek-ai/dsh` 0.2.1-rc.2。`engines.dsh` と共有DSHパッケージのpeerを同版へ固定しています。
+- 公式npm版 `@deepseek-ai/dsh` 0.2.1-rc.2。`engines.dsh` と共有DSHパッケージのpeerを同版へ固定しています。
 - DSHが使うpnpmをPATHから実行できること。
-- `shiguredo/deepseek-harness` の `shiguredo` ブランチは、確認対象commit `bb8e649df3c976c9cd965037593f353009992ae3` で0.2.1-rc.2です。標準bundleの導入仕様、Agent・tool APIを確認しています。フォーク自体のビルド・実行試験と、公開npm版での実行試験は区別します。
+公式版を対応基準とします。フォーク固有のAPI、保存領域、ホストコードの変更には依存しません。WSLのzsh・専用npm prefix・systemdで運用する場合は [専用ガイド](wsl-systemd.md) を参照してください。
 
 今後DSHのバージョンが変わった場合は、APIと導入テストを確認してから対応範囲を更新します。別バージョンを確認なしで互換扱いにはしません。
 
@@ -33,21 +33,6 @@ dsh plugin --profile session-messaging add /absolute/path/to/DSH-Session-Messagi
 
 `--from-default-profile` は同名のプロファイルをテンプレートで置き換えます。既存プロファイルの更新や、通常の再起動では使わないでください。
 
-## shiguredoフォークをソースから起動する場合
-
-フォークの取得・ビルドはそのREADMEに従い、`pnpm dsh --version` が0.2.1-rc.2と表示される状態にします。Harnessのホストコードを編集する必要はありません。
-
-まずこのプラグインのディレクトリで `npm ci --ignore-scripts` を実行します。次に、ビルド済みフォークのディレクトリで:
-
-```bash
-pnpm dsh plugin --profile web add /absolute/path/to/DSH-Session-Messaging
-pnpm dsh --profile web --dump-config
-```
-
-以後の `dsh ...` も、このディレクトリで `pnpm dsh ...` として実行します。`DSH_HOME` を普段指定している場合は、追加・起動・削除のすべてで同じ値を使ってください。
-
-フォークはインスタンス別の保存領域も拡張しています。このプラグインのDBはその内部ディレクトリ構造を推定せず、configの絶対パスで明示します。異なるHarnessプロセスには別のDBと閲覧ポートを割り当ててください。
-
 ## 配布用tarball
 
 JavaScriptをそのまま同梱しているため、ビルド・prepareスクリプトは不要です。プラグインのディレクトリで:
@@ -66,7 +51,7 @@ tarballにはbundleパッチ、実行JS、設定スキーマ、viewerのHTML/JS�
 1. Web UIで接続するセッションを作成・ロードし、実Session IDを取得します。
 2. `examples/profile.patch.yml` のパスとSession ID、provider/modelラベルを置き換えます。
 3. `$DSH_HOME/profiles/<profile>/cordis.patch.yml` の既存のYAMLリストへ編集済みの行を追加します。既定のホームは `~/.dsh`。同じidがあればその行を更新し、ファイル全体は上書きしません。
-4. 起動シェルへ `DSH_TOWER_VIEWER_TOKEN` を24バイト以上の秘密値として設定します。
+4. 起動シェルへ `DSH_TOWER_VIEWER_TOKEN` を24バイト以上の秘密値として設定します。systemdではシェルのexportを引き継がないため、サービスのEnvironmentFileに指定します。
 5. プロファイルを再起動します（例: `dsh --profile web --no-open`）。bundleの追加・削除後は再起動してください。
 6. 既定の `http://127.0.0.1:3091` へ接続し、トークン認証後にセッション一覧を確認します。
 
@@ -102,10 +87,10 @@ DSH_BIN=/absolute/path/to/dsh DSH_INSTALL_MODE=link npm run test:install
 
 設定スキーマの検出もDSH CLIで確認します。公開DSH rc.2のWeb構成では、一部の組み込みpreset行などの投影が部分的になり、`--dump-config-schema` 全体が終了コード1になる場合があります。テストではこのbundle自身の行が `status: schema` で完全に投影されることを要求し、他の行に関する部分出力とは区別します。全DSH構成のスキーマが正常という判定には使いません。
 
-ソース起動のフォークを直接検証する場合は、そのビルド済み起動処理へ引数を転送する実行可能なラッパーを `DSH_BIN` に指定します。ラッパーは `pnpm --dir /absolute/path/to/deepseek-harness dsh "$@"` のように引数と環境変数を保持してください。テストはラッパーを一時ディレクトリから呼び、渡すDSH_HOMEはテスト専用です。
+公式DSHをソースから起動して検証する場合は、そのビルド済み起動処理へ引数を転送する実行可能なラッパーを `DSH_BIN` に指定します。ラッパーは `pnpm --dir /absolute/path/to/deepseek-harness dsh "$@"` のように引数と環境変数を保持してください。テストはラッパーを一時ディレクトリから呼び、渡すDSH_HOMEはテスト専用です。
 
 ## v0.1.0からの変更
 
 v0.1.0は手動の `ctx.plugin()` 組み込み例だけでした。v0.1.1は `dsh.bundle` とパッチで導入する形式を追加し、初期状態を設定待ちにしています。以前の手動設定には `enabled: true` の追加が必要です。DBスキーマと既存の通信・タスク記録形式は変更していません。
 
-参照: [フォーク側の公式導入ガイド](https://github.com/shiguredo/deepseek-harness/blob/bb8e649df3c976c9cd965037593f353009992ae3/docs/user/develop/basic/publish.md)。
+参照: [公式DSHの導入ガイド](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/docs/user/develop/basic/publish.md)。

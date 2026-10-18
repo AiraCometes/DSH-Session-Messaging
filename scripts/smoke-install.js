@@ -24,6 +24,7 @@ const env = {...process.env, DSH_HOME:home, DSH_TOWER_VIEWER_TOKEN:token};
 let child, childExited, logs = '';
 function command(file, args, cwd = directory) {
   const result = spawnSync(file, args, { cwd, env, encoding:'utf8', timeout:180000, maxBuffer:8*1024*1024 });
+  assert.ifError(result.error);
   assert.equal(result.status, 0, `${file} ${args.join(' ')} failed:\n${result.error ?? ''}\n${result.stderr}\n${result.stdout?.slice(-10000)}`);
   return result.stdout;
 }
@@ -67,6 +68,7 @@ try {
   // Require our own row to be fully projected, rather than treating that as our success.
   const schemaDump = spawnSync(binary,['--profile',profile,'--dump-config-schema'],
     {cwd:directory,env,encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
+  assert.ifError(schemaDump.error);
   assert.ok([0,1].includes(schemaDump.status), `Schema collection failed: ${schemaDump.error ?? schemaDump.stderr}`);
   const schema = JSON.parse(schemaDump.stdout);
   const schemaEntry = schema['x-cordis'].entries.find(entry=>entry.id==='session-messaging');
