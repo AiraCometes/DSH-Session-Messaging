@@ -51,9 +51,30 @@ export const Config = Schema.union([
   enabledConfig,
 ]).required();
 
+// Cordis validates through Standard Schema before apply(). Select the active
+// branch there too, so its issues retain field paths rather than a union dump.
+// The native union graph remains available to DSH's static schema projector.
+const standard = Config['~standard'];
+Object.defineProperty(Config, '~standard', {
+  value: {
+    ...standard,
+    validate(input) {
+      try {
+        return input?.enabled === true
+          ? enabledConfig['~standard'].validate(input)
+          : standard.validate(input);
+      } catch (cause) {
+        // Shared byte/nonblank checks throw TowerError, not Schemastery's error.
+        if (cause instanceof TowerError) return { issues: [{ message: cause.message }] };
+        throw cause;
+      }
+    },
+  },
+});
+
 /** Both runtime entry points share defaults and structured configuration errors. */
 export function resolveConfig(input) {
-  try { return Config(input); }
+  try { return input?.enabled === true ? enabledConfig(input) : Config(input); }
   catch (cause) {
     throw new TowerError('INVALID_CONFIG', `Invalid Session Messaging configuration: ${cause.message}`);
   }

@@ -119,3 +119,27 @@ test('enabling requires explicit unique bindings before database creation at bot
     }
   }
 });
+
+
+test('enabled errors retain field paths in runtime and Cordis pre-validation', async () => {
+  for (const [input, path] of [
+    [{enabled:true,pollMs:50}, ['pollMs']],
+    [{enabled:true,port:65536}, ['port']],
+    [{enabled:true,sessions:[{...binding,role:'admin'}]}, ['sessions',0,'role']],
+  ]) {
+    const result = Config['~standard'].validate(input);
+    assert.deepEqual(result.issues[0].path, path);
+    assert.doesNotMatch(result.issues[0].message, /enabled\?: false/);
+    const field = path.at(-1);
+    for (const entry of [apply, applyWithDependencies]) {
+      await assert.rejects(entry({}, input), error => {
+        assert.equal(error.code, 'INVALID_CONFIG');
+        assert.ok(error.message.includes(`.${field}`));
+        assert.doesNotMatch(error.message, /enabled\?: false/);
+        return true;
+      });
+    }
+  }
+  const input = {enabled:true,port:'0',pollMs:'500'};
+  assert.deepEqual(Config['~standard'].validate(input).value, resolveConfig(input));
+});
