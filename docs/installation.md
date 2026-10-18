@@ -7,7 +7,7 @@
 - DSHが使うpnpmをPATHから実行できること。
 公式版を対応基準とします。フォーク固有のAPI、保存領域、ホストコードの変更には依存しません。WSLのzsh・専用npm prefix・systemdで運用する場合は [専用ガイド](wsl-systemd.md) を参照してください。
 
-今後DSHのバージョンが変わった場合は、APIと導入テストを確認してから対応範囲を更新します。別バージョンを確認なしで互換扱いにはしません。
+共有DSHパッケージのpeerはoptionalです。ホストが提供するパッケージの自動追加を避けるためであり、互換性制約をなくす指定ではありません。対応範囲は意図して検証済みの0.2.1-rc.2へ固定します。rc.3や正式版などへ更新する場合は、APIと導入テストを確認してから範囲を更新します。未検証の版を許可するための `^` 指定や互換性チェックの回避は行いません。
 
 ## npm版DSHへローカルチェックアウトを導入
 
@@ -46,7 +46,7 @@ tarballにはbundleパッチ、実行JS、設定スキーマ、viewerのHTML/JS�
 
 ## 設定と有効化
 
-インストール時の `enabled: false` は、接続先未設定の状態を表します。この状態ではDBやviewerを開きません。Plugin Managerでbundleを有効にすることと、業務設定の `enabled: true` は別です。
+インストール時の `enabled: false` は、設定待ちを表します。この状態では編集中の不正なrole・数値等も保持し、DB・viewer・ツール・配送処理を開始しません。実行用の設定検証は `enabled: true` で行います。`enabled` 自体の不正な値（文字列など）は拒否します。Plugin Managerでbundleを有効にすることと、業務設定の `enabled: true` は別です。
 
 1. Web UIで接続するセッションを作成・ロードし、実Session IDを取得します。
 2. `examples/profile.patch.yml` のパスとSession ID、provider/modelラベルを置き換えます。
@@ -85,12 +85,12 @@ DSH_BIN=/absolute/path/to/dsh DSH_INSTALL_MODE=link npm run test:install
 
 各実行は独立した一時DSH_HOMEとWebプロファイルを使い、pack内容、標準add、設定レイヤー、実Agentの7ツール、viewer認証、DB終了処理、removeを確認します。LLMへプロンプトは送らず、モデル課金は発生しません。テスト用のprovider/modelラベルは実モデルの稼働を示しません。ネットワークはpnpmによる依存取得に必要になる場合があります。
 
-設定スキーマの検出もDSH CLIで確認します。公開DSH rc.2のWeb構成では、一部の組み込みpreset行などの投影が部分的になり、`--dump-config-schema` 全体が終了コード1になる場合があります。テストではこのbundle自身の行が `status: schema` で完全に投影されることを要求し、他の行に関する部分出力とは区別します。全DSH構成のスキーマが正常という判定には使いません。
+設定スキーマの検出もDSH CLIで確認します。本bundleの数値文字列変換・UTF-8バイト長等の実行時検証は、DSHの静的JSON Schemaへ完全には投影されず、行のstatusは `partial` になります。テストはConfig参照と、変換・文字列長についての既知のwarningだけであることを要求し、スキーマ不明・投影エラー・未知の制限を成功扱いしません。入力の変換と拒否はStandard Schemaおよび両runtimeエントリーポイントの回帰テストで確認します。公開DSH rc.2には組み込み行の部分投影もあり、`--dump-config-schema` 全体の終了コード1だけを本bundleの失敗や成功とはみなしません。
 
 公式DSHをソースから起動して検証する場合は、そのビルド済み起動処理へ引数を転送する実行可能なラッパーを `DSH_BIN` に指定します。ラッパーは `pnpm --dir /absolute/path/to/deepseek-harness dsh "$@"` のように引数と環境変数を保持してください。テストはラッパーを一時ディレクトリから呼び、渡すDSH_HOMEはテスト専用です。
 
 ## v0.1.0からの変更
 
-v0.1.0は手動の `ctx.plugin()` 組み込み例だけでした。v0.1.1は `dsh.bundle` とパッチで導入する形式を追加し、初期状態を設定待ちにしています。以前の手動設定には `enabled: true` の追加が必要です。DBスキーマと既存の通信・タスク記録形式は変更していません。
+v0.1.0は手動の `ctx.plugin()` 組み込み例だけでした。v0.1.1は `dsh.bundle` とパッチで導入する形式を追加し、初期状態を設定待ちにしています。以前の手動設定には `enabled: true` の追加が必要です。セッション設定が残ったまま無効になっている場合は、実行時に移行方法をwarnで案内します。自動有効化はしません。引用符付きの十進整数（例: `port: "3091"`、`pollMs: "500"`）は数値に正規化します。float・指数表記・ソケットパス等の文字列は拒否します。有効化時の設定検証失敗はruntimeエントリーポイントで `TowerError` / `INVALID_CONFIG` に統一します（Cordis自身の事前検証エラーはCordis側の形式です）。DBスキーマと既存の通信・タスク記録形式は変更していません。
 
 参照: [公式DSHの導入ガイド](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/docs/user/develop/basic/publish.md)。

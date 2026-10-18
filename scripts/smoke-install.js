@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { setTimeout as pause } from 'node:timers/promises';
 
 // Opt-in, real DSH CLI test. Uses a new DSH_HOME and never submits an LLM request.
@@ -21,7 +20,7 @@ const profileDir = join(home, 'profiles', profile);
 const database = join(directory, 'tower.sqlite');
 const token = randomBytes(32).toString('hex');
 const env = {...process.env, DSH_HOME:home, DSH_TOWER_VIEWER_TOKEN:token};
-let child, childExited, logs = '';
+let child, childExited, childFailure, logs = '';
 function command(file, args, cwd = directory) {
   const result = spawnSync(file, args, { cwd, env, encoding:'utf8', timeout:180000, maxBuffer:8*1024*1024 });
   assert.ifError(result.error);
@@ -32,23 +31,27 @@ async function waitFor(check, label, timeoutMs = 30000) {
   const deadline = Date.now()+timeoutMs;
   while (Date.now()<deadline) {
     try { const result=await check(); if (result) return result; } catch { /* Wait for boot. */ }
-    if (child && child.exitCode!==null) throw new Error(`DSH exited ${child.exitCode}: ${logs}`);
+    if (childFailure) throw childFailure;
+    if (child && (child.exitCode!==null || child.signalCode!==null)) {
+      throw new Error(`DSH exited (${child.signalCode ?? child.exitCode}): ${logs}`);
+    }
     await pause(100);
   }
   throw new Error(`Timeout: ${label}\n${logs}`);
 }
 async function stop() {
   if (!child) return;
-  if (child.exitCode===null) child.kill('SIGTERM');
-  let code = await Promise.race([childExited, pause(15000, undefined, {ref:false}).then(()=>'timeout')]);
-  if (code==='timeout') {
+  if (child.exitCode===null && child.signalCode===null) child.kill('SIGTERM');
+  const result = await Promise.race([childExited, pause(15000, undefined, {ref:false}).then(()=>'timeout')]);
+  if (result==='timeout') {
     child.kill('SIGKILL');
     await childExited;
     child=undefined;
     throw new Error(`DSH shutdown timeout\n${logs}`);
   }
   child=undefined;
-  assert.ok(code===0 || code===null, `DSH shutdown failed (${code}): ${logs}`);
+  assert.ok(result.code===0 || result.signal==='SIGTERM',
+    `DSH shutdown failed (${result.signal ?? result.code}): ${logs}`);
 }
 try {
   assert.match(command(binary, ['--version']), /0\.2\.1-rc\.2/);
@@ -65,22 +68,23 @@ try {
   assert.match(initial,/id: session-messaging/);
   assert.match(initial,/enabled: false/);
   // DSH rc.2 can emit a partial schema and exit 1 for unrelated built-in preset rows.
-  // Require our own row to be fully projected, rather than treating that as our success.
+  // Our byte checks / numeric transforms also require native runtime validation.
   const schemaDump = spawnSync(binary,['--profile',profile,'--dump-config-schema'],
     {cwd:directory,env,encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
   assert.ifError(schemaDump.error);
   assert.ok([0,1].includes(schemaDump.status), `Schema collection failed: ${schemaDump.error ?? schemaDump.stderr}`);
   const schema = JSON.parse(schemaDump.stdout);
   const schemaEntry = schema['x-cordis'].entries.find(entry=>entry.id==='session-messaging');
-  assert.equal(schemaEntry?.status,'schema','DSH must discover the exported Config schema');
-  if (schemaDump.status===1) console.log('NOTE: DSH reported partial schemas for other rows; this bundle Config projected successfully.');
+  assert.equal(schemaEntry?.status,'partial','DSH must discover Config with explicit runtime validation limits');
+  assert.ok(schemaEntry.configRef?.startsWith('#/$defs/config'));
+  const ownDiagnostics=schema['x-cordis'].diagnostics.filter(item=>item.path===schemaEntry.path);
+  assert.ok(ownDiagnostics.length>0,'Runtime-only constraints must be disclosed');
+  for(const item of ownDiagnostics) {
+    assert.equal(item.level,'warning');
+    assert.match(item.message,/transform callback validation and normalization|UTF-16 (minimum|maximum) length/);
+  }
+  console.log('NOTE: Config projects with explicit numeric-transform / string-length limits; native validation is tested at runtime.');
   console.log(`PASS: ${mode} bundle installs and contributes its dormant configuration layer`);
-
-  const reservation=createServer();
-  await new Promise((resolve,reject)=>{reservation.once('error',reject);reservation.listen(0,'127.0.0.1',resolve);});
-  const viewerUrl=`http://127.0.0.1:${reservation.address().port}`;
-  const viewerPort=reservation.address().port;
-  await new Promise((resolve,reject)=>reservation.close(error=>error?reject(error):resolve()));
 
   // Bootstrap a host plugin in the real profile; it makes idle Agents only.
   const ids = [randomUUID(), randomUUID()];
@@ -109,11 +113,16 @@ export async function apply(ctx) {
   const state=await definition.execute({}, {agent,signal:new AbortController().signal});
   assert.equal(state.sessions.length,2);
   assert.equal(ctx.tools.schemas(agent).filter(tool=>tool.name.startsWith('tower_')).length,7);
-  await writeFile(${JSON.stringify(report)},JSON.stringify({tools:7,sessions:2,requestsToLLM:0}));
+  // DSH keeps Cordis info logs in its structured buffer rather than stdout.
+  const notice=ctx.logger.buffer.flatMap(entry=>entry.args).find(value=>
+    typeof value==='string' && value.startsWith('Session Messaging viewer: '));
+  assert.ok(notice,'viewer must log its operating-system-assigned address');
+  const viewerUrl=notice.split(' ')[3];
+  await writeFile(${JSON.stringify(report)},JSON.stringify({tools:7,sessions:2,requestsToLLM:0,viewerUrl}));
 }
 `);
   // No telemetry/upload providers are needed for this model-free smoke test.
-  const config = {enabled:true,database,port:viewerPort,sessions:[
+  const config = {enabled:true,database,port:0,sessions:[
     {id:'control',role:'tower',address:ids[0],provider:'smoke',model:'not-called'},
     {id:'review',role:'review',address:ids[1],provider:'smoke',model:'not-called'},
   ]};
@@ -127,13 +136,15 @@ export async function apply(ctx) {
   const configured = command(binary,['--profile',profile,'--dump-config']);
   assert.match(configured,/enabled: true/);
   child=spawn(binary,['--profile',profile,'--port','0','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
-  childExited=new Promise(resolve=>child.once('close',resolve));
-  child.on('error',error=>{logs+=error.message;});
+  childExited=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
+  child.on('error',error=>{childFailure=error;logs+=error.message;});
   for(const stream of [child.stdout,child.stderr])stream.on('data',data=>{
     logs=(logs+data.toString().replace(/([?&]token=)[^&\s]+/g,'$1[redacted]')).slice(-100000);
   });
   const result=await waitFor(async()=>JSON.parse(await readFile(report,'utf8')),'real Agent tool registration');
   assert.equal(result.tools,7);
+  const {viewerUrl}=result;
+  assert.match(viewerUrl,/^http:\/\/127\.0\.0\.1:[1-9]\d*$/);
   const snapshot=await waitFor(async()=>{
     const response=await fetch(`${viewerUrl}/api/snapshot`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(1000)});
     return response.ok?response.json():undefined;

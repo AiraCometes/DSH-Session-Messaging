@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual, createHash } from 'node:crypto';
-import { ensure, text } from '../core/validation.js';
+import { ensure, text, GITHUB_REPOSITORY_PATTERN } from '../core/validation.js';
 
 const EVENTS = new Set(['push', 'pull_request', 'check_run', 'workflow_run']);
 const clip = value => typeof value === 'string' ? value.slice(0, 500) : null;
@@ -16,7 +16,7 @@ export function verifySignature(raw, signature, secret) {
 export class GitHubIntegration {
   constructor(tower, { secret, repositories, sender, target }) {
     text(secret, 'GitHub webhook secret', 4096);
-    ensure(Array.isArray(repositories) && repositories.length > 0 && repositories.every(r => /^[\w.-]+\/[\w.-]+$/.test(r)),
+    ensure(Array.isArray(repositories) && repositories.length > 0 && repositories.every(r => typeof r === 'string' && GITHUB_REPOSITORY_PATTERN.test(r)),
       'INVALID_CONFIG', 'Configure an explicit GitHub repository allowlist');
     tower.session(sender); tower.session(target);
     this.tower = tower;

@@ -46,7 +46,7 @@ test('published Harness packages accept tool schemas and canonical message resul
     rmSync(dir,{recursive:true,force:true});
   });
   const {ctx,all}=host();
-  runtime=await applyWithDependencies(ctx,{database:join(dir,'tower.sqlite'),viewer:false,sessions:[
+  runtime=await applyWithDependencies(ctx,{enabled:true,database:join(dir,'tower.sqlite'),viewer:false,sessions:[
     {id:'control',role:'tower',address:'session-control',model:'a',provider:'p'},
     {id:'impl',role:'implementation',address:'session-impl',model:'b',provider:'p'},
   ]},{defineTool,createUserMessage});
@@ -70,7 +70,7 @@ test('plugin registers scoped tools, rejects spoofed callers, dispatches and dis
     rmSync(dir,{recursive:true,force:true});
   });
   const {ctx,all}=host();
-  runtime=await applyWithDependencies(ctx,{database:join(dir,'tower.sqlite'),viewer:false,pollMs:60000,sessions:[
+  runtime=await applyWithDependencies(ctx,{enabled:true,database:join(dir,'tower.sqlite'),viewer:false,pollMs:60000,sessions:[
     {id:'control',role:'tower',address:'session-control',model:'mA',provider:'pA'},
     {id:'impl',role:'implementation',address:'session-impl',model:'mB',provider:'pB'},
   ]},{defineTool:value=>value,createUserMessage:value=>({...value,id:'accepted-id'})});

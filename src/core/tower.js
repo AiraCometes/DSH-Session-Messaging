@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ensure, identifier, integer, oneOf, text } from './validation.js';
+import { ensure, identifier, integer, oneOf, text, SESSION_ADDRESS_MAX_BYTES, SESSION_LABEL_MAX_BYTES } from './validation.js';
 import { DeliveryRejected } from './delivery.js';
 
 const TERMINAL = ['completed'];
@@ -35,9 +35,9 @@ export class ControlTower {
       id: identifier(input.id),
       role: oneOf(input.role, ['tower', 'spec', 'implementation', 'review', 'integration'], 'role'),
       adapter: identifier(input.adapter, 'adapter'),
-      address: text(input.address, 'address', 500),
-      model: text(input.model, 'model', 200),
-      provider: text(input.provider, 'provider', 200),
+      address: text(input.address, 'address', SESSION_ADDRESS_MAX_BYTES),
+      model: text(input.model, 'model', SESSION_LABEL_MAX_BYTES),
+      provider: text(input.provider, 'provider', SESSION_LABEL_MAX_BYTES),
     };
     return this.store.transaction(() => {
       const existing = this.store.get('sessions', value.id);

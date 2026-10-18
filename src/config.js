@@ -1,33 +1,60 @@
 import Schema from '@deepseek-ai/schemastery';
+import {
+  TowerError, integer, text, IDENTIFIER_PATTERN, IDENTIFIER_MAX_BYTES,
+  SESSION_ADDRESS_MAX_BYTES, SESSION_LABEL_MAX_BYTES, GITHUB_REPOSITORY_PATTERN,
+} from './core/validation.js';
 
-const positive = fallback => Schema.number().step(1).min(1).default(fallback);
+// Preserve quoted decimal integers from YAML, but reject paths, floats and exponents.
+const numeric = (label, min, max) => Schema.union([
+  Schema.number().step(1).min(min).max(max),
+  Schema.transform(Schema.string().pattern(/^\d+$/), value => integer(Number(value), label, min, max)),
+]);
+const positive = (label, fallback) => numeric(label, 1, Number.MAX_SAFE_INTEGER).default(fallback);
 const envName = fallback => Schema.string().pattern(/^[A-Za-z_][A-Za-z0-9_]*$/).default(fallback);
+const id = () => Schema.string().min(1).max(IDENTIFIER_MAX_BYTES).pattern(IDENTIFIER_PATTERN);
+const boundedText = (label, max) => Schema.transform(
+  Schema.string().min(1).max(max), value => text(value, label, max));
 const session = Schema.object({
-  id: Schema.string().min(1).required().description('Stable identity used by the messaging tools.'),
+  id: id().required().description('Stable identity used by the messaging tools.'),
   role: Schema.union(['tower', 'spec', 'implementation', 'review']).required(),
-  address: Schema.string().min(1).required().description('Exact Session ID of the live Harness agent.'),
-  provider: Schema.string().min(1).required().description('Configured provider label for the audit log.'),
-  model: Schema.string().min(1).required().description('Configured model label; this does not select a model.'),
+  address: boundedText('address', SESSION_ADDRESS_MAX_BYTES).required().description('Exact Session ID; at most 500 UTF-8 bytes.'),
+  provider: boundedText('provider', SESSION_LABEL_MAX_BYTES).required().description('Configured provider label for the audit log.'),
+  model: boundedText('model', SESSION_LABEL_MAX_BYTES).required().description('Configured model label; this does not select a model.'),
 });
 const github = Schema.object({
-  target: Schema.string().min(1).required().description('Configured session identity that receives events.'),
-  sender: Schema.string().min(1).default('github'),
+  target: id().required().description('Configured session identity that receives events.'),
+  sender: id().default('github'),
   secretEnv: envName('DSH_TOWER_GITHUB_SECRET'),
-  repositories: Schema.array(Schema.string().pattern(/^[\w.-]+\/[\w.-]+$/)).min(1).required(),
+  repositories: Schema.array(Schema.string().pattern(GITHUB_REPOSITORY_PATTERN)).min(1).required(),
 });
 
-/** Standard Schema consumed by Cordis and DSH's configuration editor. */
-export const Config = Schema.object({
-  enabled: Schema.boolean().default(false).description('Enable after configuring explicit session bindings.'),
+const enabledConfig = Schema.object({
+  enabled: Schema.const(true).required(),
   database: Schema.string().min(1).default('.tower/control-tower.sqlite').description('Prefer an absolute path for profile-based launches.'),
   sessions: Schema.array(session).default([]),
   viewer: Schema.boolean().default(true),
   viewerTokenEnv: envName('DSH_TOWER_VIEWER_TOKEN'),
-  port: Schema.number().step(1).min(0).max(65535).default(3091).description('Viewer port; 0 chooses an available port.'),
-  pollMs: Schema.number().step(1).min(100).max(60000).default(500),
+  port: numeric('port', 0, 65535).default(3091).description('Viewer port; 0 chooses an available port.'),
+  pollMs: numeric('pollMs', 100, 60000).default(500),
   limits: Schema.object({
-    maxMessageBytes: positive(65536), maxPending: positive(1000),
-    maxThreadMessages: positive(32), maxSendsPerMinute: positive(60),
+    maxMessageBytes: positive('maxMessageBytes', 65536), maxPending: positive('maxPending', 1000),
+    maxThreadMessages: positive('maxThreadMessages', 32), maxSendsPerMinute: positive('maxSendsPerMinute', 60),
   }),
   github: Schema.union([github, Schema.const(null)]).default(null),
 });
+
+/** Cordis validates before apply(), so the exported schema must also allow dormant drafts. */
+export const Config = Schema.union([
+  // Check the inert branch before any operational transforms can run.
+  // Unknown fields are retained for editing/migration, never activated.
+  Schema.object({ enabled: Schema.const(false).default(false) }),
+  enabledConfig,
+]).required();
+
+/** Both runtime entry points share defaults and structured configuration errors. */
+export function resolveConfig(input) {
+  try { return Config(input); }
+  catch (cause) {
+    throw new TowerError('INVALID_CONFIG', `Invalid Session Messaging configuration: ${cause.message}`);
+  }
+}
