@@ -143,3 +143,29 @@ test('enabled errors retain field paths in runtime and Cordis pre-validation', a
   const input = {enabled:true,port:'0',pollMs:'500'};
   assert.deepEqual(Config['~standard'].validate(input).value, resolveConfig(input));
 });
+
+
+test('numeric range errors include bounds and full paths for numbers and quoted integers', () => {
+  for (const [patch, path, lower, upper] of [
+    [{pollMs:50}, ['pollMs'], 100, 60000],
+    [{pollMs:'50'}, ['pollMs'], 100, 60000],
+    [{pollMs:60001}, ['pollMs'], 100, 60000],
+    [{port:65536}, ['port'], 0, 65535],
+    [{port:'65536'}, ['port'], 0, 65535],
+    [{limits:{maxPending:0}}, ['limits','maxPending'], 1, Number.MAX_SAFE_INTEGER],
+    [{limits:{maxPending:'0'}}, ['limits','maxPending'], 1, Number.MAX_SAFE_INTEGER],
+  ]) {
+    const input = {enabled:true,...patch};
+    const result = Config['~standard'].validate(input);
+    assert.deepEqual(result.issues[0].path, path);
+    assert.ok(result.issues[0].message.includes(`from ${lower} to ${upper}`));
+    assert.throws(() => resolveConfig(input), error => {
+      assert.equal(error.code, 'INVALID_CONFIG');
+      assert.ok(error.message.includes(`from ${lower} to ${upper}`));
+      return true;
+    });
+  }
+  for (const pollMs of [100, '100', 60000, '60000']) {
+    assert.equal(resolveConfig({enabled:true,pollMs}).pollMs, Number(pollMs));
+  }
+});

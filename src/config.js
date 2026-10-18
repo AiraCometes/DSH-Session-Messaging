@@ -5,11 +5,18 @@ import {
 } from './core/validation.js';
 
 // Preserve quoted decimal integers from YAML, but reject paths, floats and exponents.
-const numeric = (label, min, max) => Schema.union([
-  Schema.number().step(1).min(min).max(max),
-  Schema.transform(Schema.string().pattern(/^\d+$/), value => integer(Number(value), label, min, max)),
-]);
-const positive = (label, fallback) => numeric(label, 1, Number.MAX_SAFE_INTEGER).default(fallback);
+const numeric = (label, min, max) => Schema.transform(
+  Schema.union([Schema.number(), Schema.string().pattern(/^\d+$/)]),
+  value => {
+    try { return integer(typeof value === 'string' ? Number(value) : value, label, min, max); }
+    catch {
+      // A failed numeric union discards its branch's range error. Validate both
+      // input types together and retain this field's path for Cordis as well.
+      throw new Schema.ValidationError(`expected an integer from ${min} to ${max}`, { path: label.split('.') });
+    }
+  },
+);
+const positive = (label, fallback) => numeric(`limits.${label}`, 1, Number.MAX_SAFE_INTEGER).default(fallback);
 const envName = fallback => Schema.string().pattern(/^[A-Za-z_][A-Za-z0-9_]*$/).default(fallback);
 const id = () => Schema.string().min(1).max(IDENTIFIER_MAX_BYTES).pattern(IDENTIFIER_PATTERN);
 const boundedText = (label, max) => Schema.transform(
