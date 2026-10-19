@@ -83,6 +83,22 @@ try {
     assert.equal(item.level,'warning');
     assert.match(item.message,/transform callback validation and normalization|UTF-16 (minimum|maximum) length/);
   }
+  // Descriptions carry numeric bounds even when transform constraints cannot project.
+  const projectedConfig=schema.$defs[schemaEntry.configRef.split('/').at(-1)];
+  function projectedProperties(node, name) {
+    if (!node || typeof node!=='object') return [];
+    return [node.properties?.[name], ...Object.values(node).flatMap(value=>projectedProperties(value,name))].filter(Boolean);
+  }
+  for (const [field,min,max] of [
+    ['port',0,65535], ['pollMs',100,60000],
+    ...['maxMessageBytes','maxPending','maxThreadMessages','maxSendsPerMinute'].map(field=>[field,1,Number.MAX_SAFE_INTEGER]),
+  ]) {
+    assert.ok(projectedProperties(projectedConfig,field).some(property=>
+      property.description?.includes(`Integer from ${min} to ${max} (inclusive)`)),
+    `${field} must retain its integer range hint in DSH's projected schema`);
+  }
+  assert.ok(projectedProperties(projectedConfig,'port').some(property=>
+    property.description?.includes('0 chooses an available port')));
   console.log('NOTE: Config projects with explicit numeric-transform / string-length limits; native validation is tested at runtime.');
   console.log(`PASS: ${mode} bundle installs and contributes its dormant configuration layer`);
 

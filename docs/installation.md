@@ -85,7 +85,11 @@ DSH_BIN=/absolute/path/to/dsh DSH_INSTALL_MODE=link npm run test:install
 
 各実行は独立した一時DSH_HOMEとWebプロファイルを使い、pack内容、標準add、設定レイヤー、実Agentの7ツール、viewer認証、DB終了処理、removeを確認します。LLMへプロンプトは送らず、モデル課金は発生しません。テスト用のprovider/modelラベルは実モデルの稼働を示しません。ネットワークはpnpmによる依存取得に必要になる場合があります。
 
-設定スキーマの検出もDSH CLIで確認します。本bundleの数値文字列変換・UTF-8バイト長等の実行時検証は、DSHの静的JSON Schemaへ完全には投影されず、行のstatusは `partial` になります。テストはConfig参照と、変換・文字列長についての既知のwarningだけであることを要求し、スキーマ不明・投影エラー・未知の制限を成功扱いしません。入力の変換と拒否はStandard Schemaおよび両runtimeエントリーポイントの回帰テストで確認します。公開DSH rc.2には組み込み行の部分投影もあり、`--dump-config-schema` 全体の終了コード1だけを本bundleの失敗や成功とはみなしません。
+設定スキーマの検出もDSH CLIで確認します。本bundleの数値文字列変換・UTF-8バイト長等の実行時検証は、DSHの静的JSON Schemaへ完全には投影されず、行のstatusは `partial` になります。
+
+数値項目のdescriptionには整数であること・下限・上限を同じ定義から生成して含めます。これは入力時の案内であり、JSON Schemaのminimum/maximum等を復元するものではありません。
+
+テストはConfig参照と、変換・文字列長についての既知のwarningだけであることを要求し、スキーマ不明・投影エラー・未知の制限を成功扱いしません。入力の変換と拒否はStandard Schemaおよび両runtimeエントリーポイントの回帰テストで確認します。公開DSH rc.2には組み込み行の部分投影もあり、`--dump-config-schema` 全体の終了コード1だけを本bundleの失敗や成功とはみなしません。
 
 公式DSHをソースから起動して検証する場合は、そのビルド済み起動処理へ引数を転送する実行可能なラッパーを `DSH_BIN` に指定します。ラッパーは `pnpm --dir /absolute/path/to/deepseek-harness dsh "$@"` のように引数と環境変数を保持してください。テストはラッパーを一時ディレクトリから呼び、渡すDSH_HOMEはテスト専用です。
 

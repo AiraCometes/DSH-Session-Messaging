@@ -5,7 +5,7 @@ import {
 } from './core/validation.js';
 
 // Preserve quoted decimal integers from YAML, but reject paths, floats and exponents.
-const numeric = (label, min, max) => Schema.transform(
+const numeric = (label, min, max, description) => Schema.transform(
   Schema.union([Schema.number(), Schema.string().pattern(/^\d+$/)]),
   value => {
     try { return integer(typeof value === 'string' ? Number(value) : value, label, min, max); }
@@ -15,7 +15,7 @@ const numeric = (label, min, max) => Schema.transform(
       throw new Schema.ValidationError(`expected an integer from ${min} to ${max}`, { path: label.split('.') });
     }
   },
-);
+).description([description, `Integer from ${min} to ${max} (inclusive). Decimal integer strings are accepted.`].filter(Boolean).join(' '));
 const positive = (label, fallback) => numeric(`limits.${label}`, 1, Number.MAX_SAFE_INTEGER).default(fallback);
 const envName = fallback => Schema.string().pattern(/^[A-Za-z_][A-Za-z0-9_]*$/).default(fallback);
 const id = () => Schema.string().min(1).max(IDENTIFIER_MAX_BYTES).pattern(IDENTIFIER_PATTERN);
@@ -41,8 +41,8 @@ const enabledConfig = Schema.object({
   sessions: Schema.array(session).default([]),
   viewer: Schema.boolean().default(true),
   viewerTokenEnv: envName('DSH_TOWER_VIEWER_TOKEN'),
-  port: numeric('port', 0, 65535).default(3091).description('Viewer port; 0 chooses an available port.'),
-  pollMs: numeric('pollMs', 100, 60000).default(500),
+  port: numeric('port', 0, 65535, 'Viewer port; 0 chooses an available port.').default(3091),
+  pollMs: numeric('pollMs', 100, 60000, 'Delivery polling interval in milliseconds.').default(500),
   limits: Schema.object({
     maxMessageBytes: positive('maxMessageBytes', 65536), maxPending: positive('maxPending', 1000),
     maxThreadMessages: positive('maxThreadMessages', 32), maxSendsPerMinute: positive('maxSendsPerMinute', 60),
