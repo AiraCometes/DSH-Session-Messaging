@@ -1,31 +1,47 @@
 import { resolve } from 'node:path';
 import { Store, ControlTower } from './core/index.js';
-import { ensure, integer } from './core/validation.js';
+import { ensure } from './core/validation.js';
 import { createHarnessAdapter } from './adapters/harness.js';
 import { GitHubIntegration } from './integrations/github.js';
 import { startServer } from './http/server.js';
+import { resolveConfig } from './config.js';
+
+export { Config } from './config.js';
 
 export const name = 'session-messaging';
 export const inject = ['agents', 'tools'];
 
 /** Cordis entry point. The runtime imports remain confined to this boundary. */
 export async function apply(ctx, config = {}) {
-  const [{ defineTool }, { createUserMessage }] = await Promise.all([
-    import('@deepseek-ai/dsh-tools'), import('@deepseek-ai/dsh-llm'),
-  ]);
-  await applyWithDependencies(ctx, config, { defineTool, createUserMessage });
+  await applyWithDependencies(ctx, config, async () => {
+    const [{ defineTool }, { createUserMessage }] = await Promise.all([
+      import('@deepseek-ai/dsh-tools'), import('@deepseek-ai/dsh-llm'),
+    ]);
+    return { defineTool, createUserMessage };
+  });
 }
 
-/** Dependency injection also permits a contract test without downloading Harness. */
-export async function applyWithDependencies(ctx, config, { defineTool, createUserMessage }) {
-  const bindings = config.sessions ?? [];
+/** Accept injected dependencies or a lazy factory; neither is used while disabled. */
+export async function applyWithDependencies(ctx, config = {}, dependencies) {
+  config = resolveConfig(config);
+  if (!config.enabled) {
+    if (Array.isArray(config.sessions) && config.sessions.length > 0) {
+      ctx.logger?.warn('Session Messaging has configured sessions but is disabled. No tools or deliveries are active. When migrating from v0.1.0, explicitly set enabled: true after checking the configuration.');
+    }
+    ctx.logger?.info('Session Messaging is installed and awaiting configuration (enabled: false); operational settings are validated when enabled.');
+    return;
+  }
+  const bindings = config.sessions;
   ensure(bindings.length > 0 && bindings.every(s => s.adapter === undefined || s.adapter === 'harness'),
     'INVALID_CONFIG', 'Configure at least one Harness session binding');
   ensure(new Set(bindings.map(s => s.address)).size === bindings.length,
     'INVALID_CONFIG', 'Each Harness address can have only one trusted session identity');
-  const pollMs = integer(config.pollMs ?? 500, 'pollMs', 100, 60000);
-  const viewerToken = process.env[config.viewerTokenEnv ?? 'DSH_TOWER_VIEWER_TOKEN'];
-  const store = new Store(resolve(config.database ?? '.tower/control-tower.sqlite'));
+  ensure(new Set(bindings.map(s => s.id)).size === bindings.length,
+    'INVALID_CONFIG', 'Each configured session identity must be unique');
+  const { defineTool, createUserMessage } = typeof dependencies === 'function' ? await dependencies() : dependencies;
+  const pollMs = config.pollMs;
+  const viewerToken = process.env[config.viewerTokenEnv];
+  const store = new Store(resolve(config.database));
   const installed = new Map();
   let viewer, timer, pumping;
   let disposed = false;
@@ -50,15 +66,15 @@ export async function applyWithDependencies(ctx, config, { defineTool, createUse
     tower.registerAdapter('harness', createHarnessAdapter({ agents: ctx.agents, createUserMessage, bindings:byAddress }));
     let github;
     if (config.github) {
-      const sender = config.github.sender ?? 'github';
+      const sender = config.github.sender;
       tower.registerSession({ id: sender, role: 'integration', adapter: 'github', address: 'webhook', model: 'none', provider: 'github' });
       github = new GitHubIntegration(tower, {
         ...config.github, sender,
-        secret: process.env[config.github.secretEnv ?? 'DSH_TOWER_GITHUB_SECRET'],
+        secret: process.env[config.github.secretEnv],
       });
     }
-    if (config.viewer !== false) {
-      viewer = await startServer(tower, { token: viewerToken, port: config.port ?? 3091, github });
+    if (config.viewer) {
+      viewer = await startServer(tower, { token: viewerToken, port: config.port, github });
       ctx.logger?.info(`Session Messaging viewer: ${viewer.url} (token required)`);
     } else ensure(!github, 'INVALID_CONFIG', 'GitHub webhooks require the HTTP server');
 

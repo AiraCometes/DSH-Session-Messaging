@@ -1,0 +1,31 @@
+# Apply AFTER installing the bundle. Replace paths and Session IDs first.
+# A profile patch replaces the entire config for this row, rather than deep-merging.
+- id: session-messaging
+  config:
+    enabled: true
+    database: /absolute/path/to/control-tower.sqlite
+    viewerTokenEnv: DSH_TOWER_VIEWER_TOKEN
+    viewer: true
+    port: 3091
+    pollMs: 500
+    sessions:
+      - id: control
+        role: tower
+        address: REPLACE-CONTROL-SESSION-ID
+        provider: REPLACE-PROVIDER
+        model: REPLACE-MODEL
+      - id: spec
+        role: spec
+        address: REPLACE-SPEC-SESSION-ID
+        provider: REPLACE-PROVIDER
+        model: REPLACE-MODEL
+      - id: implementation
+        role: implementation
+        address: REPLACE-IMPLEMENTATION-SESSION-ID
+        provider: REPLACE-PROVIDER
+        model: REPLACE-MODEL
+      - id: review
+        role: review
+        address: REPLACE-REVIEW-SESSION-ID
+        provider: REPLACE-PROVIDER
+        model: REPLACE-MODEL

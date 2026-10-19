@@ -1,0 +1,100 @@
+# DSH標準bundleとしてのインストール
+
+## 対応環境
+
+- WSL2/Linux、Node.js 24以降。
+- 公式npm版 `@deepseek-ai/dsh` 0.2.1-rc.2。`engines.dsh` と共有DSHパッケージのpeerを同版へ固定しています。
+- DSHが使うpnpmをPATHから実行できること。
+公式版を対応基準とします。フォーク固有のAPI、保存領域、ホストコードの変更には依存しません。WSLのzsh・専用npm prefix・systemdで運用する場合は [専用ガイド](wsl-systemd.md) を参照してください。
+
+共有DSHパッケージのpeerはoptionalです。ホストが提供するパッケージの自動追加を避けるためであり、互換性制約をなくす指定ではありません。対応範囲は意図して検証済みの0.2.1-rc.2へ固定します。rc.3や正式版などへ更新する場合は、APIと導入テストを確認してから範囲を更新します。未検証の版を許可するための `^` 指定や互換性チェックの回避は行いません。
+
+## npm版DSHへローカルチェックアウトを導入
+
+DSHは既にインストール済みとします。このプラグインのディレクトリで:
+
+```bash
+npm ci --ignore-scripts
+dsh --version
+dsh plugin --profile web add "$PWD"
+dsh --profile web --dump-config
+```
+
+`--profile` はpnpmに渡す `add` より前へ置きます。ローカルパスは絶対パスにすると、コマンドを実行する場所に依存しません。この方法はチェックアウトへのlinkを作るため、そのディレクトリを移動・削除すると解決できなくなります。
+
+設定ダンプに `id: session-messaging`、`name: dsh-session-messaging`、`enabled: false` があればbundleレイヤーが追加されています。ダンプは起動確認ではありません。
+
+追加先が既存のWebプロファイルなら、そのまま利用できます。独立したプロファイルを新設する場合は、**初回だけ**次を実行してから、そのプロファイルへ `add` します。
+
+```bash
+dsh --profile session-messaging --from-default-profile web --dump-config
+dsh plugin --profile session-messaging add /absolute/path/to/DSH-Session-Messaging
+```
+
+`--from-default-profile` は同名のプロファイルをテンプレートで置き換えます。既存プロファイルの更新や、通常の再起動では使わないでください。
+
+## 配布用tarball
+
+JavaScriptをそのまま同梱しているため、ビルド・prepareスクリプトは不要です。プラグインのディレクトリで:
+
+```bash
+npm pack --ignore-scripts
+dsh plugin --profile web add /absolute/path/to/dsh-session-messaging-0.1.1.tgz
+```
+
+tarballにはbundleパッチ、実行JS、設定スキーマ、viewerのHTML/JS、表示用locale、設定例が含まれます。テストやnode_modulesは含めません。npmレジストリへの公開は行っていません。
+
+## 設定と有効化
+
+インストール時の `enabled: false` は、設定待ちを表します。この状態では編集中の不正なrole・数値等も保持し、DB・viewer・ツール・配送処理を開始しません。実行用の設定検証は `enabled: true` で行います。`enabled` 自体の不正な値（文字列など）は拒否します。Plugin Managerでbundleを有効にすることと、業務設定の `enabled: true` は別です。
+
+1. Web UIで接続するセッションを作成・ロードし、実Session IDを取得します。
+2. `examples/profile.patch.yml` のパスとSession ID、provider/modelラベルを置き換えます。
+3. `$DSH_HOME/profiles/<profile>/cordis.patch.yml` の既存のYAMLリストへ編集済みの行を追加します。既定のホームは `~/.dsh`。同じidがあればその行を更新し、ファイル全体は上書きしません。
+4. 起動シェルへ `DSH_TOWER_VIEWER_TOKEN` を24バイト以上の秘密値として設定します。systemdではシェルのexportを引き継がないため、サービスのEnvironmentFileに指定します。
+5. プロファイルを再起動します（例: `dsh --profile web --no-open`）。bundleの追加・削除後は再起動してください。
+6. 既定の `http://127.0.0.1:3091` へ接続し、トークン認証後にセッション一覧を確認します。
+
+ホストの再起動で対象Agentが未ロードになった場合は、Web UI等から同じ保存済みセッションをロードしてください。設定だけではセッションをコールド再開しません。HMRが有効な環境では設定の変更に伴ってプラグインが再構成されます。
+
+DSHの設定画面ではエクスポートしたStandard Schemaの `Config` を参照できます。相互参照や重複IDなど、実セッション構成に依存するチェックは起動時にも行います。トークン・Webhook secretは環境変数の**名前**だけをconfigに指定し、値をYAMLに書きません。
+
+viewerを使わない場合は `viewer: false`。GitHub Webhookを使う場合はviewerサーバーが必要で、`github` にtarget・許可リポジトリ・secretEnv等を設定します。
+
+## 更新・削除
+
+更新前にDSHを停止します。link導入はチェックアウトを更新して `npm ci --ignore-scripts` を実行し、tarball導入は新しいアーカイブを `dsh plugin --profile <profile> add <新しいtgzの絶対パス>` で追加します。バージョン要件を確認してから再起動してください。初期化用の `--from-default-profile` は使いません。
+
+削除時はユーザーパッチの `id: session-messaging` 行を取り除き、停止後に:
+
+```bash
+dsh plugin --profile web remove dsh-session-messaging
+dsh --profile web --dump-config
+```
+
+bundleレイヤーが消えることを確認します。DBと通信履歴は保持します。他のプラグイン設定、既存セッション、他プロファイルは削除しません。
+
+## 導入の自動検証
+
+このリポジトリのチェックアウトで、DSH実行ファイルの絶対パスを指定します。pnpmもPATH上に必要です。
+
+```bash
+DSH_BIN=/absolute/path/to/dsh npm run test:install
+DSH_BIN=/absolute/path/to/dsh DSH_INSTALL_MODE=link npm run test:install
+```
+
+各実行は独立した一時DSH_HOMEとWebプロファイルを使い、pack内容、標準add、設定レイヤー、実Agentの7ツール、viewer認証、DB終了処理、removeを確認します。LLMへプロンプトは送らず、モデル課金は発生しません。テスト用のprovider/modelラベルは実モデルの稼働を示しません。ネットワークはpnpmによる依存取得に必要になる場合があります。
+
+設定スキーマの検出もDSH CLIで確認します。本bundleの数値文字列変換・UTF-8バイト長等の実行時検証は、DSHの静的JSON Schemaへ完全には投影されず、行のstatusは `partial` になります。
+
+数値項目のdescriptionには整数であること・下限・上限を同じ定義から生成して含めます。これは入力時の案内であり、JSON Schemaのminimum/maximum等を復元するものではありません。
+
+テストはConfig参照と、変換・文字列長についての既知のwarningだけであることを要求し、スキーマ不明・投影エラー・未知の制限を成功扱いしません。入力の変換と拒否はStandard Schemaおよび両runtimeエントリーポイントの回帰テストで確認します。公開DSH rc.2には組み込み行の部分投影もあり、`--dump-config-schema` 全体の終了コード1だけを本bundleの失敗や成功とはみなしません。
+
+公式DSHをソースから起動して検証する場合は、そのビルド済み起動処理へ引数を転送する実行可能なラッパーを `DSH_BIN` に指定します。ラッパーは `pnpm --dir /absolute/path/to/deepseek-harness dsh "$@"` のように引数と環境変数を保持してください。テストはラッパーを一時ディレクトリから呼び、渡すDSH_HOMEはテスト専用です。
+
+## v0.1.0からの変更
+
+v0.1.0は手動の `ctx.plugin()` 組み込み例だけでした。v0.1.1は `dsh.bundle` とパッチで導入する形式を追加し、初期状態を設定待ちにしています。以前の手動設定には `enabled: true` の追加が必要です。セッション設定が残ったまま無効になっている場合は、実行時に移行方法をwarnで案内します。自動有効化はしません。引用符付きの十進整数（例: `port: "3091"`、`pollMs: "500"`）は数値に正規化します。float・指数表記・ソケットパス等の文字列は拒否します。有効化時の設定検証失敗はruntimeエントリーポイントで `TowerError` / `INVALID_CONFIG` に統一します（Cordis自身の事前検証エラーはCordis側の形式です）。DBスキーマと既存の通信・タスク記録形式は変更していません。
+
+参照: [公式DSHの導入ガイド](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/docs/user/develop/basic/publish.md)。

@@ -1,3 +1,9 @@
+export const IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.:/-]*$/;
+export const IDENTIFIER_MAX_BYTES = 200;
+export const SESSION_ADDRESS_MAX_BYTES = 500;
+export const SESSION_LABEL_MAX_BYTES = 200;
+export const GITHUB_REPOSITORY_PATTERN = /^[\w.-]+\/[\w.-]+$/;
+
 /** Shared boundary validation. Adapters must never trust model or webhook input. */
 export class TowerError extends Error {
   constructor(code, message, status = 400) {
@@ -19,8 +25,8 @@ export function text(value, label, max = 65536) {
 }
 
 export function identifier(value, label = 'id') {
-  text(value, label, 200);
-  ensure(/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]*$/.test(value), 'INVALID_INPUT', `${label} has invalid characters`);
+  text(value, label, IDENTIFIER_MAX_BYTES);
+  ensure(IDENTIFIER_PATTERN.test(value), 'INVALID_INPUT', `${label} has invalid characters`);
   return value;
 }
 

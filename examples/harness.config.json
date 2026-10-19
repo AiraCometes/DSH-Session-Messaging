@@ -1,4 +1,5 @@
 {
+  "enabled": true,
   "database": ".tower/control-tower.sqlite",
   "viewerTokenEnv": "DSH_TOWER_VIEWER_TOKEN",
   "port": 3091,
